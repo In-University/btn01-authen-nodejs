@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -12,16 +12,11 @@ import { CalendarIcon } from 'lucide-react';
 import { Calendar } from '@/components/ui/calendar';
 import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
-
-enum Gender {
-  MALE = 'MALE',
-  FEMALE = 'FEMALE',
-  OTHER = 'OTHER',
-}
+import api from '@/lib/api'; 
 
 const formSchema = z.object({
   fullName: z.string().min(2, { message: 'Full name must be at least 2 characters.' }),
-  gender: z.enum([Gender.MALE, Gender.FEMALE, Gender.OTHER]).default(Gender.OTHER),
+  gender: z.enum(['MALE', 'FEMALE', 'OTHER']), 
   dob: z.date().optional(),
   email: z.string().email({ message: 'Invalid email address.' }),
   phoneNumber: z.string().regex(/^(0|\+84)(3|5|7|8|9)[0-9]{8}$/, { message: 'Invalid phone number.' }).optional(),
@@ -29,24 +24,76 @@ const formSchema = z.object({
   image: z.string().url({ message: 'Invalid URL for image.' }).optional(),
 });
 
+type UserProfile = z.infer<typeof formSchema>;
+
 const ProfileForm: React.FC = () => {
-  const form = useForm<z.infer<typeof formSchema>>({
+  const [loading, setLoading] = useState(true);
+  const form = useForm<UserProfile>({
     resolver: zodResolver(formSchema),
     defaultValues: {
-      fullName: 'John Doe',
-      gender: Gender.MALE,
-      dob: new Date('1990-01-01'),
-      email: 'john.doe@example.com',
-      phoneNumber: '0912345678',
-      address: '123 Main St, City, Country',
-      image: 'https://example.com/avatar.jpg',
+      fullName: '',
+      gender: 'OTHER', 
+      dob: undefined,
+      email: '',
+      phoneNumber: '',
+      address: '',
+      image: '',
     },
   });
 
-  const onSubmit = (values: z.infer<typeof formSchema>) => {
-    console.log(values);
-    // Handle profile update logic here
+  useEffect(() => {
+    const fetchProfile = async () => {
+      try {
+        const response = await api.get('/users/1'); 
+        const userData = response.data;
+        console.log('Fetched user data:', userData);
+        const profileData: UserProfile = {
+          fullName: userData.name,
+          email: userData.email,
+          gender: 'MALE', 
+          dob: new Date('1990-01-01'),
+          phoneNumber: userData.phone,
+          address: `${userData.address.street}, ${userData.address.city}`,
+          image: 'https://i.pravatar.cc/150?img=3',
+        };
+        
+        form.reset(profileData);
+      } catch (error) {
+        console.error('Failed to fetch profile:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchProfile();
+  }, [form]);
+
+  const onSubmit = async (values: UserProfile) => {
+    console.log('Submitting profile:', values);
+    try {
+      setLoading(true);
+      await new Promise(resolve => setTimeout(resolve, 1000)); 
+      console.log('Profile updated successfully!');
+    } catch (error) {
+      console.error('Failed to update profile:', error);
+    } finally {
+      setLoading(false);
+    }
   };
+
+  if (loading) {
+    return (
+      <Card className="w-full max-w-2xl">
+        <CardHeader>
+          <CardTitle className="text-3xl font-bold">Loading Profile...</CardTitle>
+          <CardDescription>Please wait while we fetch your profile information.</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <p>Loading...</p>
+        </CardContent>
+      </Card>
+    );
+  }
 
   return (
     <Card className="w-full max-w-2xl">
@@ -76,16 +123,16 @@ const ProfileForm: React.FC = () => {
               render={({ field }) => (
                 <FormItem>
                   <FormLabel>Gender</FormLabel>
-                  <Select onValueChange={field.onChange} defaultValue={field.value}>
+                  <Select onValueChange={field.onChange} value={field.value}>
                     <FormControl>
                       <SelectTrigger>
                         <SelectValue placeholder="Select your gender" />
                       </SelectTrigger>
                     </FormControl>
                     <SelectContent>
-                      <SelectItem value={Gender.MALE}>Male</SelectItem>
-                      <SelectItem value={Gender.FEMALE}>Female</SelectItem>
-                      <SelectItem value={Gender.OTHER}>Other</SelectItem>
+                      <SelectItem value="MALE">Male</SelectItem>
+                      <SelectItem value="FEMALE">Female</SelectItem>
+                      <SelectItem value="OTHER">Other</SelectItem>
                     </SelectContent>
                   </Select>
                   <FormMessage />
@@ -186,7 +233,9 @@ const ProfileForm: React.FC = () => {
               )}
             />
             <div className="col-span-1 md:col-span-2">
-              <Button type="submit" className="w-full">Update Profile</Button>
+              <Button type="submit" className="w-full" disabled={loading}>
+                {loading ? 'Updating...' : 'Update Profile'}
+              </Button>
             </div>
           </form>
         </Form>
