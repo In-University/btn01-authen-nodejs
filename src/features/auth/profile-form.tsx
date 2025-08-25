@@ -44,17 +44,17 @@ const ProfileForm: React.FC = () => {
   useEffect(() => {
     const fetchProfile = async () => {
       try {
-        const response = await api.get('/users/1'); 
-        const userData = response.data;
+        const response = await api.get('/auth/myInfo'); 
+        const userData = response.data.data; 
         console.log('Fetched user data:', userData);
         const profileData: UserProfile = {
-          fullName: userData.name,
+          fullName: userData.fullName,
           email: userData.email,
-          gender: 'MALE', 
-          dob: new Date('1990-01-01'),
-          phoneNumber: userData.phone,
-          address: `${userData.address.street}, ${userData.address.city}`,
-          image: 'https://i.pravatar.cc/150?img=3',
+          gender: userData.gender.toUpperCase() as "MALE" | "FEMALE" | "OTHER", 
+          dob: userData.dob ? new Date(userData.dob) : undefined,
+          phoneNumber: userData.phoneNumber,
+          address: userData.address,
+          image: userData.image,
         };
         
         form.reset(profileData);
@@ -72,10 +72,16 @@ const ProfileForm: React.FC = () => {
     console.log('Submitting profile:', values);
     try {
       setLoading(true);
-      await new Promise(resolve => setTimeout(resolve, 1000)); 
-      console.log('Profile updated successfully!');
+      const response = await api.put('/auth/updateProfile', {
+        ...values,
+        gender: values.gender.toLowerCase(), // Convert gender back to lowercase for backend
+        dob: values.dob ? values.dob.toISOString() : undefined, // Convert Date to ISO string
+      });
+      console.log('Profile updated successfully:', response.data);
+      alert('Profile updated successfully!');
     } catch (error) {
       console.error('Failed to update profile:', error);
+      alert('Failed to update profile. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -97,11 +103,20 @@ const ProfileForm: React.FC = () => {
 
   return (
     <Card className="w-full max-w-2xl">
-      <CardHeader>
+      <CardHeader className="text-center">
         <CardTitle className="text-3xl font-bold">Profile Settings</CardTitle>
         <CardDescription>Manage your profile information and preferences.</CardDescription>
       </CardHeader>
       <CardContent>
+        {form.watch('image') && (
+          <div className="flex justify-center mb-6">
+            <img
+              src={form.watch('image')}
+              alt="Profile Avatar"
+              className="w-24 h-24 rounded-full object-cover border-2 border-gray-300"
+            />
+          </div>
+        )}
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} className="grid grid-cols-1 gap-6 md:grid-cols-2">
             <FormField
@@ -214,19 +229,6 @@ const ProfileForm: React.FC = () => {
                   <FormLabel>Address</FormLabel>
                   <FormControl>
                     <Input placeholder="123 Main St, City, Country" {...field} />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-            <FormField
-              control={form.control}
-              name="image"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Profile Image URL</FormLabel>
-                  <FormControl>
-                    <Input placeholder="https://example.com/avatar.jpg" {...field} />
                   </FormControl>
                   <FormMessage />
                 </FormItem>

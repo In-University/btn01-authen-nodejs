@@ -1,7 +1,7 @@
 import axios from 'axios';
 
 const api = axios.create({
-  baseURL: 'https://jsonplaceholder.typicode.com', // Using a public mock API for demonstration
+  baseURL: 'http://localhost:8099', // Replace with your API base URL
   headers: {
     'Content-Type': 'application/json',
   },
@@ -10,10 +10,10 @@ const api = axios.create({
 // Request interceptor for JWT (commented out for now)
 api.interceptors.request.use(
   (config: any) => {
-    // const token = localStorage.getItem('jwtToken');
-    // if (token) {
-    //   config.headers.Authorization = `Bearer ${token}`;
-    // }
+    const token = localStorage.getItem('jwtToken');
+    if (token) {
+      config.headers.Authorization = `Bearer ${token}`;
+    }
     return config;
   },
   (error: any) => {
@@ -27,7 +27,9 @@ api.interceptors.response.use(
   },
   (error: any) => {
     if (error.response && error.response.status === 401) {
-      // Redirect to login page or refresh token
+      // Redirect to login page
+      localStorage.removeItem('jwtToken');
+      window.location.href = '/login'; // Assuming '/login' is your login route
     }
     return Promise.reject(error);
   }
