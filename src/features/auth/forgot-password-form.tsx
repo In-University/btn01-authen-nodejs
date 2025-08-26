@@ -1,30 +1,36 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
-import { Label } from '@/components/ui/label';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { authAPI } from '@/lib/api';
 import { toast } from 'sonner';
+import { useAppDispatch, useAppSelector } from '@/store/hooks';
+import { forgotPassword, resetPassword, clearError } from '@/store/slices/authSlice';
 
 const emailFormSchema = z.object({
   email: z.string().email({ message: 'Email không hợp lệ.' }),
 });
 
+const resetFormSchema = z.object({
+  otp: z.string().min(6, { message: 'OTP phải có 6 ký tự.' }),
+  newPassword: z.string().min(6, { message: 'Mật khẩu mới phải có ít nhất 6 ký tự.' }),
+  confirmPassword: z.string().min(6, { message: 'Xác nhận mật khẩu phải có ít nhất 6 ký tự.' }),
+}).refine((data) => data.newPassword === data.confirmPassword, {
+  message: "Mật khẩu xác nhận không khớp.",
+  path: ['confirmPassword'],
+});
+
 const ForgotPasswordForm: React.FC = () => {
   const navigate = useNavigate();
-  const [isLoading, setIsLoading] = useState(false);
+  const dispatch = useAppDispatch();
+  const { isLoading, error } = useAppSelector((state) => state.auth);
+  
   const [step, setStep] = useState<'email' | 'reset'>('email');
   const [userEmail, setUserEmail] = useState('');
-  
-  // Separate states for reset form to avoid conflicts
-  const [otp, setOtp] = useState('');
-  const [newPassword, setNewPassword] = useState('');
-  const [confirmPassword, setConfirmPassword] = useState('');
 
   const emailForm = useForm<z.infer<typeof emailFormSchema>>({
     resolver: zodResolver(emailFormSchema),
@@ -33,75 +39,70 @@ const ForgotPasswordForm: React.FC = () => {
     },
   });
 
+  const resetForm = useForm<z.infer<typeof resetFormSchema>>({
+    resolver: zodResolver(resetFormSchema),
+    defaultValues: {
+      otp: '',
+      newPassword: '',
+      confirmPassword: '',
+    },
+    mode: 'onChange', // Add mode to force re-validation
+  });
+
+  useEffect(() => {
+    if (error) {
+      toast.error(error);
+      dispatch(clearError());
+    }
+  }, [error, dispatch]);
+
   const onSubmitEmail = async (values: z.infer<typeof emailFormSchema>) => {
     try {
-      setIsLoading(true);
-      const response = await authAPI.forgotPassword(values.email);
-      
-      if (response.status === 200) {
+      const result = await dispatch(forgotPassword({ email: values.email }));
+      if (forgotPassword.fulfilled.match(result)) {
         setUserEmail(values.email);
-        // Clear all states when switching to reset step
-        setOtp('');
-        setNewPassword('');
-        setConfirmPassword('');
-        setStep('reset');
+        
+        // Force completely new form instance
+        setTimeout(() => {
+          resetForm.reset({
+            otp: '',
+            newPassword: '',
+            confirmPassword: '',
+          }, { keepDefaultValues: false });
+          
+          setStep('reset');
+        }, 100);
+        
         toast.success('Mã OTP đã được gửi đến email của bạn!');
       }
-    } catch (error: unknown) {
-      const errorMessage = error instanceof Error && 'response' in error 
-        ? (error as {response?: {data?: {message?: string}}}).response?.data?.message 
-        : 'Gửi mã OTP thất bại!';
-      toast.error(errorMessage || 'Gửi mã OTP thất bại!');
-    } finally {
-      setIsLoading(false);
+    } catch {
+      // Error handled by Redux state
     }
   };
 
-  const onSubmitReset = async () => {
-    // Validation
-    if (!otp || otp.length !== 6) {
-      toast.error('Vui lòng nhập mã OTP 6 số!');
-      return;
-    }
-    
-    if (!newPassword || newPassword.length < 6) {
-      toast.error('Mật khẩu mới phải có ít nhất 6 ký tự!');
-      return;
-    }
-    
-    if (newPassword !== confirmPassword) {
-      toast.error('Mật khẩu xác nhận không khớp!');
-      return;
-    }
-
+  const onSubmitReset = async (values: z.infer<typeof resetFormSchema>) => {
     try {
-      setIsLoading(true);
-      const response = await authAPI.resetPassword({
+      const result = await dispatch(resetPassword({
         email: userEmail,
-        otp: otp,
-        newPassword: newPassword,
-      });
+        otp: values.otp,
+        newPassword: values.newPassword,
+      }));
       
-      if (response.status === 200) {
-        toast.success('Đặt lại mật khẩu thành công! Vui lòng đăng nhập.');
+      if (resetPassword.fulfilled.match(result)) {
+        toast.success('Đặt lại mật khẩu thành công!');
         navigate('/login');
       }
-    } catch (error: unknown) {
-      const errorMessage = error instanceof Error && 'response' in error 
-        ? (error as {response?: {data?: {message?: string}}}).response?.data?.message 
-        : 'Đặt lại mật khẩu thất bại!';
-      toast.error(errorMessage || 'Đặt lại mật khẩu thất bại!');
-    } finally {
-      setIsLoading(false);
+    } catch {
+      // Error handled by Redux state
     }
   };
 
   if (step === 'email') {
     return (
-      <Card className="w-[350px]">
+      <Card className="w-[400px]">
         <CardHeader>
           <CardTitle>Quên mật khẩu</CardTitle>
-          <CardDescription>Nhập email để nhận mã OTP đặt lại mật khẩu.</CardDescription>
+          <CardDescription>Nhập email của bạn để nhận mã OTP.</CardDescription>
         </CardHeader>
         <CardContent>
           <Form {...emailForm}>
@@ -119,95 +120,117 @@ const ForgotPasswordForm: React.FC = () => {
                   </FormItem>
                 )}
               />
+              
               <Button type="submit" className="w-full" disabled={isLoading}>
                 {isLoading ? 'Đang gửi...' : 'Gửi mã OTP'}
               </Button>
-              <div className="mt-4 text-center text-sm">
-                Nhớ mật khẩu?{' '}
-                <Button variant="link" onClick={() => navigate('/login')} className="p-0 h-auto">
-                  Đăng nhập
-                </Button>
-              </div>
             </form>
           </Form>
+          
+          <div className="mt-4 text-center">
+            <button
+              type="button"
+              onClick={() => navigate('/login')}
+              className="text-sm underline-offset-4 hover:underline"
+            >
+              Quay lại đăng nhập
+            </button>
+          </div>
         </CardContent>
       </Card>
     );
   }
 
   return (
-    <Card className="w-[350px]">
+    <Card className="w-[400px]">
       <CardHeader>
         <CardTitle>Đặt lại mật khẩu</CardTitle>
         <CardDescription>
-          Nhập mã OTP và mật khẩu mới cho email: {userEmail}
+          Nhập mã OTP đã được gửi đến {userEmail} và mật khẩu mới.
         </CardDescription>
       </CardHeader>
       <CardContent>
-        <div className="space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor="otp">Mã OTP (6 số)</Label>
-            <Input
-              id="otp"
-              type="text"
-              placeholder="Nhập mã OTP"
-              value={otp}
-              onChange={(e) => setOtp(e.target.value)}
-              maxLength={6}
-              disabled={isLoading}
-              className="text-center tracking-wider"
+        <Form {...resetForm} key={`reset-form-${userEmail}`}>
+          <form onSubmit={resetForm.handleSubmit(onSubmitReset)} className="space-y-4">
+            <FormField
+              control={resetForm.control}
+              name="otp"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Mã OTP</FormLabel>
+                  <FormControl>
+                    <Input 
+                      placeholder="Nhập mã OTP 6 số"
+                      {...field}
+                      type="text"
+                      maxLength={6}
+                      className="text-center text-lg tracking-widest"
+                      autoComplete="off"
+                      inputMode="numeric"
+                      onChange={(e) => {
+                        const value = e.target.value.replace(/\D/g, '');
+                        field.onChange(value);
+                      }}
+                    />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
             />
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="newPassword">Mật khẩu mới</Label>
-            <Input
-              id="newPassword"
-              type="password"
-              placeholder="Nhập mật khẩu mới"
-              value={newPassword}
-              onChange={(e) => setNewPassword(e.target.value)}
-              disabled={isLoading}
+            
+            <FormField
+              control={resetForm.control}
+              name="newPassword"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Mật khẩu mới</FormLabel>
+                  <FormControl>
+                    <Input type="password" placeholder="••••••••" {...field} />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
             />
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="confirmPassword">Xác nhận mật khẩu</Label>
-            <Input
-              id="confirmPassword"
-              type="password"
-              placeholder="Nhập lại mật khẩu mới"
-              value={confirmPassword}
-              onChange={(e) => setConfirmPassword(e.target.value)}
-              disabled={isLoading}
+            
+            <FormField
+              control={resetForm.control}
+              name="confirmPassword"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Xác nhận mật khẩu mới</FormLabel>
+                  <FormControl>
+                    <Input type="password" placeholder="••••••••" {...field} />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
             />
-          </div>
-
-          <Button 
-            onClick={onSubmitReset}
-            className="w-full" 
-            disabled={isLoading}
+            
+            <Button type="submit" className="w-full" disabled={isLoading}>
+              {isLoading ? 'Đang đặt lại...' : 'Đặt lại mật khẩu'}
+            </Button>
+          </form>
+        </Form>
+        
+        <div className="mt-4 text-center space-y-2">
+          <button
+            type="button"
+            onClick={() => {
+              setStep('email');
+              emailForm.reset();
+            }}
+            className="text-sm underline-offset-4 hover:underline"
           >
-            {isLoading ? 'Đang xử lý...' : 'Đặt Lại Mật Khẩu'}
-          </Button>
-
-          <div className="mt-4 text-center text-sm space-x-2">
-            <Button 
-              variant="link" 
-              onClick={() => setStep('email')} 
-              className="p-0 h-auto"
-            >
-              Quay lại
-            </Button>
-            <span>|</span>
-            <Button 
-              variant="link" 
-              onClick={() => navigate('/login')} 
-              className="p-0 h-auto"
-            >
-              Đăng nhập
-            </Button>
-          </div>
+            Gửi lại OTP
+          </button>
+          <br />
+          <button
+            type="button"
+            onClick={() => navigate('/login')}
+            className="text-sm underline-offset-4 hover:underline"
+          >
+            Quay lại đăng nhập
+          </button>
         </div>
       </CardContent>
     </Card>

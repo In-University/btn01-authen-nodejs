@@ -10,18 +10,34 @@ import {
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { useNavigate } from "react-router-dom";
-import { useState } from "react";
-import { authAPI } from "@/lib/api";
+import { useState, useEffect } from "react";
 import { toast } from "sonner";
+import { useAppDispatch, useAppSelector } from "@/store/hooks";
+import { loginUser, clearError } from "@/store/slices/authSlice";
 
 export function LoginForm({
   className,
   ...props
 }: React.ComponentProps<"div">) {
   const navigate = useNavigate();
+  const dispatch = useAppDispatch();
+  const { isLoading, error, isAuthenticated } = useAppSelector((state) => state.auth);
+  
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [isLoading, setIsLoading] = useState(false);
+
+  useEffect(() => {
+    if (isAuthenticated) {
+      navigate("/profile");
+    }
+  }, [isAuthenticated, navigate]);
+
+  useEffect(() => {
+    if (error) {
+      toast.error(error);
+      dispatch(clearError());
+    }
+  }, [error, dispatch]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -32,28 +48,13 @@ export function LoginForm({
     }
 
     try {
-      setIsLoading(true);
-      const response = await authAPI.login({ email, password });
-      
-      if (response.status === 200) {
-        // Save token and user info to localStorage
-        localStorage.setItem("jwtToken", response.data.data.token);
-        
-        // Optionally save user info if returned by API
-        if (response.data.data.user) {
-          localStorage.setItem("userInfo", JSON.stringify(response.data.data.user));
-        }
-        
+      const result = await dispatch(loginUser({ email, password }));
+      if (loginUser.fulfilled.match(result)) {
         toast.success("Đăng nhập thành công!");
         navigate("/profile");
       }
-    } catch (error: unknown) {
-      const errorMessage = error instanceof Error && 'response' in error 
-        ? (error as any).response?.data?.message 
-        : 'Đăng nhập thất bại!';
-      toast.error(errorMessage);
-    } finally {
-      setIsLoading(false);
+    } catch {
+      // Error will be handled by the error state
     }
   };
 

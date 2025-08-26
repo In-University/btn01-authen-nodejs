@@ -1,6 +1,6 @@
 import React from 'react';
 import { useSearchParams } from 'react-router-dom';
-import OtpVerificationForm from '@/features/auth/otp-verification-form';
+import OtpVerificationForm from '../features/auth/otp-verification';
 
 const OtpVerificationPage: React.FC = () => {
   const [searchParams] = useSearchParams();

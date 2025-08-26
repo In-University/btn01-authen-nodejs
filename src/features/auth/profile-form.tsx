@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -12,28 +12,31 @@ import { CalendarIcon } from 'lucide-react';
 import { Calendar } from '@/components/ui/calendar';
 import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
-import api from '@/lib/api';
 import { toast } from 'sonner'; 
+import { useAppDispatch, useAppSelector } from '@/store/hooks';
+import { fetchProfile, updateProfile, clearError } from '@/store/slices/authSlice';
 
 const formSchema = z.object({
   fullName: z.string().min(2, { message: 'Full name must be at least 2 characters.' }),
-  gender: z.enum(['MALE', 'FEMALE', 'OTHER']), 
+  gender: z.enum(['Male', 'Female', 'Other']), 
   dob: z.date().optional(),
   email: z.string().email({ message: 'Invalid email address.' }),
-  phoneNumber: z.string().regex(/^(0|\+84)(3|5|7|8|9)[0-9]{8}$/, { message: 'Invalid phone number.' }).optional(),
+  phoneNumber: z.string().optional(),
   address: z.string().optional(),
-  image: z.string().url({ message: 'Invalid URL for image.' }).optional(),
+  image: z.string().optional(),
 });
 
 type UserProfile = z.infer<typeof formSchema>;
 
 const ProfileForm: React.FC = () => {
-  const [loading, setLoading] = useState(true);
+  const dispatch = useAppDispatch();
+  const { user, isLoading, error } = useAppSelector((state) => state.auth);
+  
   const form = useForm<UserProfile>({
     resolver: zodResolver(formSchema),
     defaultValues: {
       fullName: '',
-      gender: 'OTHER', 
+      gender: 'Other', 
       dob: undefined,
       email: '',
       phoneNumber: '',
@@ -43,62 +46,55 @@ const ProfileForm: React.FC = () => {
   });
 
   useEffect(() => {
-    const fetchProfile = async () => {
-      try {
-        const response = await api.get('/auth/myInfo'); 
-        const userData = response.data.data; 
-        console.log('Fetched user data:', userData);
-        const profileData: UserProfile = {
-          fullName: userData.fullName,
-          email: userData.email,
-          gender: userData.gender.toUpperCase() as "MALE" | "FEMALE" | "OTHER", 
-          dob: userData.dob ? new Date(userData.dob) : undefined,
-          phoneNumber: userData.phoneNumber,
-          address: userData.address,
-          image: userData.image,
-        };
-        
-        form.reset(profileData);
-      } catch (error) {
-        console.error('Failed to fetch profile:', error);
-      } finally {
-        setLoading(false);
-      }
-    };
+    dispatch(fetchProfile());
+  }, [dispatch]);
 
-    fetchProfile();
-  }, [form]);
+  useEffect(() => {
+    if (user) {
+      const profileData: UserProfile = {
+        fullName: user.fullName || '',
+        email: user.email || '',
+        gender: (user.gender as 'Male' | 'Female' | 'Other') || 'Other',
+        dob: user.dob ? new Date(user.dob) : undefined,
+        phoneNumber: user.phoneNumber || '',
+        address: user.address || '',
+        image: user.image || '',
+      };
+      form.reset(profileData);
+    }
+  }, [user, form]);
+
+  useEffect(() => {
+    if (error) {
+      toast.error(error);
+      dispatch(clearError());
+    }
+  }, [error, dispatch]);
 
   const onSubmit = async (values: UserProfile) => {
-    console.log('Submitting profile:', values);
     try {
-      setLoading(true);
-      const response = await api.put('/auth/updateProfile', {
+      const result = await dispatch(updateProfile({
         ...values,
-        gender: values.gender.toLowerCase(), // Convert gender back to lowercase for backend
-        dob: values.dob ? values.dob.toISOString() : undefined, // Convert Date to ISO string
-      });
-      console.log('Profile updated successfully:', response.data);
-      toast.success('Profile updated successfully!');
-    } catch (error) {
-      console.error('Failed to update profile:', error);
-      toast.error('Failed to update profile. Please try again.');
-    } finally {
-      setLoading(false);
+        dob: values.dob ? values.dob.toISOString().split('T')[0] : undefined,
+      }));
+      
+      if (updateProfile.fulfilled.match(result)) {
+        toast.success('Cập nhật profile thành công!');
+      }
+    } catch {
+      // Error will be handled by Redux state
     }
   };
 
-  // Đã bỏ hàm handleLogout vì không còn dùng
-
-  if (loading) {
+  if (isLoading && !user) {
     return (
       <Card className="w-full max-w-2xl">
         <CardHeader>
-          <CardTitle className="text-3xl font-bold">Loading Profile...</CardTitle>
-          <CardDescription>Please wait while we fetch your profile information.</CardDescription>
+          <CardTitle className="text-3xl font-bold">Đang tải Profile...</CardTitle>
+          <CardDescription>Vui lòng đợi trong khi chúng tôi tải thông tin profile của bạn.</CardDescription>
         </CardHeader>
         <CardContent>
-          <p>Loading...</p>
+          <p>Đang tải...</p>
         </CardContent>
       </Card>
     );
@@ -107,13 +103,8 @@ const ProfileForm: React.FC = () => {
   return (
     <Card className="w-full max-w-2xl">
       <CardHeader className="text-center">
-        <div className="flex justify-between items-start">
-          <div className="flex-1">
-            <CardTitle className="text-3xl font-bold">Profile Settings</CardTitle>
-            <CardDescription>Manage your profile information and preferences.</CardDescription>
-          </div>
-          {/* Đã xoá nút logout, không còn Button ở đây */}
-        </div>
+        <CardTitle className="text-3xl font-bold">Cài đặt Profile</CardTitle>
+        <CardDescription>Quản lý thông tin profile và tùy chọn của bạn.</CardDescription>
       </CardHeader>
       <CardContent>
         <div className="flex justify-center mb-6">
@@ -130,56 +121,72 @@ const ProfileForm: React.FC = () => {
               name="fullName"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Full Name</FormLabel>
+                  <FormLabel>Họ và tên</FormLabel>
                   <FormControl>
-                    <Input placeholder="John Doe" {...field} />
+                    <Input placeholder="Nhập họ và tên" {...field} />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
               )}
             />
+
+            <FormField
+              control={form.control}
+              name="email"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Email</FormLabel>
+                  <FormControl>
+                    <Input placeholder="Nhập email" {...field} disabled />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
             <FormField
               control={form.control}
               name="gender"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Gender</FormLabel>
-                  <Select onValueChange={field.onChange} value={field.value}>
+                  <FormLabel>Giới tính</FormLabel>
+                  <Select onValueChange={field.onChange} defaultValue={field.value}>
                     <FormControl>
                       <SelectTrigger>
-                        <SelectValue placeholder="Select your gender" />
+                        <SelectValue placeholder="Chọn giới tính" />
                       </SelectTrigger>
                     </FormControl>
                     <SelectContent>
-                      <SelectItem value="MALE">Male</SelectItem>
-                      <SelectItem value="FEMALE">Female</SelectItem>
-                      <SelectItem value="OTHER">Other</SelectItem>
+                      <SelectItem value="Male">Nam</SelectItem>
+                      <SelectItem value="Female">Nữ</SelectItem>
+                      <SelectItem value="Other">Khác</SelectItem>
                     </SelectContent>
                   </Select>
                   <FormMessage />
                 </FormItem>
               )}
             />
+
             <FormField
               control={form.control}
               name="dob"
               render={({ field }) => (
                 <FormItem className="flex flex-col">
-                  <FormLabel>Date of Birth</FormLabel>
+                  <FormLabel>Ngày sinh</FormLabel>
                   <Popover>
                     <PopoverTrigger asChild>
                       <FormControl>
                         <Button
-                          variant={"outline"}
+                          variant="outline"
                           className={cn(
                             "w-full pl-3 text-left font-normal",
                             !field.value && "text-muted-foreground"
                           )}
                         >
                           {field.value ? (
-                            format(field.value, "PPP")
+                            format(field.value, "dd/MM/yyyy")
                           ) : (
-                            <span>Pick a date</span>
+                            <span>Chọn ngày sinh</span>
                           )}
                           <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
                         </Button>
@@ -201,50 +208,56 @@ const ProfileForm: React.FC = () => {
                 </FormItem>
               )}
             />
-            <FormField
-              control={form.control}
-              name="email"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Email</FormLabel>
-                  <FormControl>
-                    <Input placeholder="m@example.com" {...field} />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
+
             <FormField
               control={form.control}
               name="phoneNumber"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Phone Number</FormLabel>
+                  <FormLabel>Số điện thoại</FormLabel>
                   <FormControl>
-                    <Input placeholder="0912345678" {...field} />
+                    <Input placeholder="Nhập số điện thoại" {...field} />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
               )}
             />
+
             <FormField
               control={form.control}
               name="address"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Address</FormLabel>
+                  <FormLabel>Địa chỉ</FormLabel>
                   <FormControl>
-                    <Input placeholder="123 Main St, City, Country" {...field} />
+                    <Input placeholder="Nhập địa chỉ" {...field} />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
               )}
             />
-            <div className="col-span-1 md:col-span-2">
-              <Button type="submit" className="w-full" disabled={loading}>
-                {loading ? 'Updating...' : 'Update Profile'}
-              </Button>
-            </div>
+
+            <FormField
+              control={form.control}
+              name="image"
+              render={({ field }) => (
+                <FormItem className="col-span-full">
+                  <FormLabel>URL Ảnh đại diện</FormLabel>
+                  <FormControl>
+                    <Input placeholder="Nhập URL ảnh đại diện" {...field} />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            <Button 
+              type="submit" 
+              className="col-span-full" 
+              disabled={isLoading}
+            >
+              {isLoading ? 'Đang cập nhật...' : 'Cập nhật Profile'}
+            </Button>
           </form>
         </Form>
       </CardContent>

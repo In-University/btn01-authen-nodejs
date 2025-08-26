@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -8,8 +8,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { authAPI } from '@/lib/api';
 import { toast } from 'sonner';
+import { useAppDispatch, useAppSelector } from '@/store/hooks';
+import { registerUser, clearError } from '@/store/slices/authSlice';
 
 const formSchema = z.object({
   email: z.string().email({ message: 'Email không hợp lệ.' }),
@@ -27,7 +28,8 @@ const formSchema = z.object({
 
 const RegisterForm: React.FC = () => {
   const navigate = useNavigate();
-  const [isLoading, setIsLoading] = useState(false);
+  const dispatch = useAppDispatch();
+  const { isLoading, error } = useAppSelector((state) => state.auth);
 
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
@@ -43,25 +45,25 @@ const RegisterForm: React.FC = () => {
     },
   });
 
+  useEffect(() => {
+    if (error) {
+      toast.error(error);
+      dispatch(clearError());
+    }
+  }, [error, dispatch]);
+
   const onSubmit = async (values: z.infer<typeof formSchema>) => {
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const { confirmPassword, ...userData } = values;
+    
     try {
-      setIsLoading(true);
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars
-      const { confirmPassword, ...userData } = values;
-      
-      const response = await authAPI.register(userData);
-      
-      if (response.status === 201) {
+      const result = await dispatch(registerUser(userData));
+      if (registerUser.fulfilled.match(result)) {
         toast.success('Đăng ký thành công! Vui lòng kiểm tra email để xác thực OTP.');
         navigate(`/verify-otp?email=${encodeURIComponent(values.email)}`);
       }
-    } catch (error: unknown) {
-      const errorMessage = error instanceof Error && 'response' in error 
-        ? (error as any).response?.data?.message 
-        : 'Đăng ký thất bại!';
-      toast.error(errorMessage);
-    } finally {
-      setIsLoading(false);
+    } catch {
+      // Error will be handled by the error state
     }
   };
 
@@ -138,6 +140,34 @@ const RegisterForm: React.FC = () => {
                 </FormItem>
               )}
             />
+            
+            <FormField
+              control={form.control}
+              name="password"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Mật khẩu</FormLabel>
+                  <FormControl>
+                    <Input type="password" placeholder="••••••••" {...field} />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            
+            <FormField
+              control={form.control}
+              name="confirmPassword"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Xác nhận mật khẩu</FormLabel>
+                  <FormControl>
+                    <Input type="password" placeholder="••••••••" {...field} />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
 
             <FormField
               control={form.control}
@@ -160,35 +190,7 @@ const RegisterForm: React.FC = () => {
                 <FormItem>
                   <FormLabel>Địa chỉ (tùy chọn)</FormLabel>
                   <FormControl>
-                    <Input placeholder="Nhập địa chỉ" {...field} />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-
-            <FormField
-              control={form.control}
-              name="password"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Mật khẩu</FormLabel>
-                  <FormControl>
-                    <Input type="password" placeholder="******" {...field} />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-            
-            <FormField
-              control={form.control}
-              name="confirmPassword"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Xác nhận mật khẩu</FormLabel>
-                  <FormControl>
-                    <Input type="password" placeholder="******" {...field} />
+                    <Input placeholder="123 Đường ABC, Quận XYZ, TP.HCM" {...field} />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
@@ -198,13 +200,6 @@ const RegisterForm: React.FC = () => {
             <Button type="submit" className="w-full" disabled={isLoading}>
               {isLoading ? 'Đang đăng ký...' : 'Đăng ký'}
             </Button>
-            
-            <div className="mt-4 text-center text-sm">
-              Đã có tài khoản?{' '}
-              <Button variant="link" onClick={() => navigate('/login')} className="p-0 h-auto">
-                Đăng nhập
-              </Button>
-            </div>
           </form>
         </Form>
       </CardContent>
