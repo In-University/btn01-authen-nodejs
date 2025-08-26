@@ -12,7 +12,8 @@ import { CalendarIcon } from 'lucide-react';
 import { Calendar } from '@/components/ui/calendar';
 import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
-import api from '@/lib/api'; 
+import api from '@/lib/api';
+import { toast } from 'sonner'; 
 
 const formSchema = z.object({
   fullName: z.string().min(2, { message: 'Full name must be at least 2 characters.' }),
@@ -78,14 +79,16 @@ const ProfileForm: React.FC = () => {
         dob: values.dob ? values.dob.toISOString() : undefined, // Convert Date to ISO string
       });
       console.log('Profile updated successfully:', response.data);
-      alert('Profile updated successfully!');
+      toast.success('Profile updated successfully!');
     } catch (error) {
       console.error('Failed to update profile:', error);
-      alert('Failed to update profile. Please try again.');
+      toast.error('Failed to update profile. Please try again.');
     } finally {
       setLoading(false);
     }
   };
+
+  // Đã bỏ hàm handleLogout vì không còn dùng
 
   if (loading) {
     return (
@@ -104,19 +107,22 @@ const ProfileForm: React.FC = () => {
   return (
     <Card className="w-full max-w-2xl">
       <CardHeader className="text-center">
-        <CardTitle className="text-3xl font-bold">Profile Settings</CardTitle>
-        <CardDescription>Manage your profile information and preferences.</CardDescription>
+        <div className="flex justify-between items-start">
+          <div className="flex-1">
+            <CardTitle className="text-3xl font-bold">Profile Settings</CardTitle>
+            <CardDescription>Manage your profile information and preferences.</CardDescription>
+          </div>
+          {/* Đã xoá nút logout, không còn Button ở đây */}
+        </div>
       </CardHeader>
       <CardContent>
-        {form.watch('image') && (
-          <div className="flex justify-center mb-6">
-            <img
-              src={form.watch('image')}
-              alt="Profile Avatar"
-              className="w-24 h-24 rounded-full object-cover border-2 border-gray-300"
-            />
-          </div>
-        )}
+        <div className="flex justify-center mb-6">
+          <img
+            src={form.watch('image') || 'https://ui-avatars.com/api/?name=User&background=random'}
+            alt="Profile Avatar"
+            className="w-24 h-24 rounded-full object-cover border-2 border-gray-300"
+          />
+        </div>
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} className="grid grid-cols-1 gap-6 md:grid-cols-2">
             <FormField
