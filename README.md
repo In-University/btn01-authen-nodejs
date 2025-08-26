@@ -1,4 +1,10 @@
 # React + TypeScript + Vite
+## Danh sách thành viên thực hiện
+- Lê Đình Lộc - 22110369
+- Võ Minh Khoa - 22110355
+- Võ Văn Trí - 22110444
+- Nguyễn Hoàng Anh Khoa - 22110352
+
 
 This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
 
